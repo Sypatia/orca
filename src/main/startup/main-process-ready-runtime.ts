@@ -168,6 +168,7 @@ export async function initializeReadyRuntimeServices(): Promise<void> {
     recordProcessGoneCrash('child', details.type, details.reason, details.exitCode ?? null, {
       name: details.name,
       serviceName: details.serviceName,
+      systemErrorCode: details.systemErrorCode,
       type: details.type
     })
     if (

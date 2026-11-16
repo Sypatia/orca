@@ -91,6 +91,9 @@ const {
 const {
   buildMacShipItScheduling
 } = require('./scripts/desktop-distribution/macos/macos-shipit-scheduling.cjs')
+const {
+  packageWindowsWerHelper
+} = require('./scripts/desktop-distribution/windows/package-windows-wer-helper.cjs')
 
 // Dev channels need release bundle ID/signature/notarization so Squirrel.Mac accepts updates and macOS retains app identity.
 const isMacHourly = process.env.ORCA_MAC_HOURLY === '1'
@@ -412,6 +415,9 @@ module.exports = {
     }
   },
   afterPack: async (context) => {
+    if (context.electronPlatformName === 'win32') {
+      packageWindowsWerHelper(context.appOutDir, context.packager.appInfo.productFilename)
+    }
     const resourcesDir =
       context.electronPlatformName === 'darwin'
         ? join(
