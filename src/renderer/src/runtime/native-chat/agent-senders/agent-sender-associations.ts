@@ -17,12 +17,11 @@ export type LocatedAgentSender = AgentSenderAssociation & {
 const key = (host: string, address: string) => JSON.stringify([host, address])
 type Aliases = ReturnType<typeof assembleAgentSenderAliases>
 type Located = LocatedAgentSender | null
-/** One host's publication on this window's panes: null where its rows disagree, and reverse
- *  pane maps so a pane's rival claims are found without walking every row. */
+/** One host's rows on this window's panes (null where they disagree), with reverse pane maps. */
 type HostPart = {
   identities: Map<string, Located>
   principals: Set<string>
-  /** The rows it runs for each home principal that attached them, by identity. */
+  /** The rows it runs for each home principal that attached them. */
   attachments: Map<string, Map<string, Located>>
   panes: Map<string, string[]>
   attachedPanes: Map<string, [principal: string, identity: string][]>
@@ -47,8 +46,7 @@ const hostParts = new WeakMap<object, { aliases: Aliases; host: string; part: Ho
 const indexes = new WeakMap<object, { aliases: Aliases; index: SenderIndex }>()
 let joins = 0
 let claims = 0
-/** Rows joined to panes (each publication's once per alias change, each host's once per update),
- *  and identity claims resolved. */
+/** Rows joined to panes and identity claims resolved. */
 export const agentSenderIndexWorkForTest = () => ({ joins, claims })
 
 function senderAliases(state: AppState): Aliases {
@@ -192,29 +190,37 @@ function claim(index: SenderIndex, host: string, identity: string): Located | un
   return value
 }
 
-/** Two hosts claiming one pane of this window make every claim on it ambiguous. A host's own
- *  claims on a pane all name that host, so only other hosts' candidates can rival it. */
+/** Two hosts claiming one pane make each claim ambiguous; a host never rivals its own claims. */
 function contested(index: SenderIndex, location: LocatedAgentSender): boolean {
   const pane = key(location.worktreeId, location.paneKey)
   const id = key(pane, location.host)
-  const known = index.rivals.get(id)
-  if (known !== undefined) {
-    return known
+  let rival = index.rivals.get(id)
+  if (rival === undefined) {
+    rival = rivalClaim(index, pane, location.host)
+    index.rivals.set(id, rival)
   }
-  const rival = [...index.parts].some(
-    ([host, part]) =>
-      host !== location.host &&
-      (part.panes.get(pane)?.some((identity) => claim(index, host, identity)) ||
-        part.attachedPanes
-          .get(pane)
-          ?.some(([principal, identity]) =>
-            [...index.parts].some(
-              ([home, homePart]) => homePart.principals.has(principal) && claim(index, home, identity)
-            )
-          ))
-  )
-  index.rivals.set(id, rival)
   return rival
+}
+
+function rivalClaim(index: SenderIndex, pane: string, claimant: string): boolean {
+  for (const [host, part] of index.parts) {
+    if (host === claimant) {
+      continue
+    }
+    for (const identity of part.panes.get(pane) ?? []) {
+      if (claim(index, host, identity)) {
+        return true
+      }
+    }
+    for (const [principal, identity] of part.attachedPanes.get(pane) ?? []) {
+      for (const [home, homePart] of index.parts) {
+        if (homePart.principals.has(principal) && claim(index, home, identity)) {
+          return true
+        }
+      }
+    }
+  }
+  return false
 }
 
 function lookup(index: SenderIndex, host: string, identity: string): Located | undefined {
@@ -232,10 +238,14 @@ let reads: Set<string> | undefined
 export function readingAgentSenders<T>(read: () => T): [T, ReadonlySet<string>] {
   const outer = reads
   reads = new Set()
+  const inner = reads
   try {
-    return [read(), reads]
+    return [read(), inner]
   } finally {
     reads = outer
+    for (const channel of inner) {
+      outer?.add(channel)
+    }
   }
 }
 
@@ -267,8 +277,7 @@ export function samePublishingHosts(a: AppState, b: AppState): boolean {
   )
 }
 
-/** The subscribed sender channels whose answer differs between two states that share tabs and
- *  owners: a publication update notifies only the cards it moves. */
+/** Subscribed sender channels whose answer moved between two states sharing tabs and owners. */
 export function movedAgentSenderChannels(
   previous: AppState,
   state: AppState,

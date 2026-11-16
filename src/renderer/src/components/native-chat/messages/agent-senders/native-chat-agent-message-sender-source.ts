@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useSyncExternalStore } from 'react'
 import { useAppStateView } from '@/store/retained-views/app-state-view'
+import type { RuntimeClientTarget } from '../../../../../../shared/remote-runtime/host-catalog/runtime-client-target'
 import { readingAgentSenders } from '@/runtime/native-chat/agent-senders/agent-sender-associations'
 import type { AppState } from '@/store/types'
 import { agentRowDisplayDotState } from '@/lib/agent-status/presentation/agent-row-dot-state'
@@ -91,8 +92,7 @@ export function useAgentMessageSenderSource(
   return useLeasedSenderSelector(leaseLocate, selected)
 }
 
-/** The addressed rows, the sender answers resolution read, and locations moved by tabs or owners
- *  are what the selected value depends on: a card is notified only when one of them changes. */
+/** Notified only when an addressed row, a sender answer it read, or tabs and owners change. */
 export function useLeasedSenderSelector<T>(
   locate: LocateSender | readonly LocateSender[],
   select: (state: AppState) => T
@@ -141,6 +141,23 @@ export function useLeasedSenderSelector<T>(
   )
   const getSnapshot = useCallback(() => select(store.getState()), [store, select])
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+}
+
+/** The card's runtime target, stable across renders that rebuild an equal one. */
+export function useStableSenderTarget(
+  target: RuntimeClientTarget | undefined
+): RuntimeClientTarget | undefined {
+  const kind = target?.kind
+  const environmentId = target?.kind === 'environment' ? target.environmentId : undefined
+  return useMemo<RuntimeClientTarget | undefined>(
+    () =>
+      kind === 'local'
+        ? { kind: 'local' }
+        : environmentId !== undefined
+          ? { kind: 'environment', environmentId }
+          : undefined,
+    [kind, environmentId]
+  )
 }
 
 export function useAgentMessageSenderSources(

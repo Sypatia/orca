@@ -2,11 +2,11 @@ import {
   hasAgentSenderPublication,
   selectAgentSenderAssociation
 } from '@/runtime/native-chat/agent-senders/agent-sender-associations'
+import { useMemo } from 'react'
 import { agentMessageSenderLabel } from '../../../../../../shared/agent-session/agent-message-presentation'
 import { translate } from '@/i18n/i18n'
 import { useTranslate } from '@/i18n/use-translate'
 import type { Translate } from '@/i18n/use-translate'
-import { useMemo } from 'react'
 import {
   structuredChatTabBySessionId,
   structuredChatWorkspacesBySessionId
@@ -23,7 +23,10 @@ import type { AppState } from '@/store/types'
 import type { RuntimeClientTarget } from '../../../../../../shared/remote-runtime/host-catalog/runtime-client-target'
 import type { AgentMessageSender } from '../../../../../../shared/agent-session/agent-session-message-source'
 import type { Tab } from '../../../../../../shared/tab-types'
-import { useLeasedSenderSelector } from './native-chat-agent-message-sender-source'
+import {
+  useLeasedSenderSelector,
+  useStableSenderTarget
+} from './native-chat-agent-message-sender-source'
 
 export function unnamedSenderLabel(t: Translate = translate): string {
   return t('components.native-chat.agentMessage.unnamedSender', 'an agent')
@@ -112,17 +115,12 @@ export function useAgentMessageSenderLabel(
 ): string {
   const t = useTranslate()
   const { address, orcaSessionId, terminalHandle } = sender.party
-  const targetKind = target?.kind
-  const environmentId = target?.kind === 'environment' ? target.environmentId : undefined
+  const stableTarget = useStableSenderTarget(target)
   const select = useMemo(() => {
-    const party = { address, orcaSessionId, terminalHandle }
-    const identity: AgentMessageSender = { party, name: null }
-    const stableTarget: RuntimeClientTarget | undefined =
-      targetKind === 'local'
-        ? { kind: 'local' }
-        : environmentId !== undefined
-          ? { kind: 'environment', environmentId }
-          : undefined
+    const identity: AgentMessageSender = {
+      party: { address, orcaSessionId, terminalHandle },
+      name: null
+    }
     let previous: LabelSource = { host: null }
     return (state: AppState): LabelSource => {
       const owner = agentMessageSenderOwner(state, chatWorktreeId, stableTarget)
@@ -130,7 +128,10 @@ export function useAgentMessageSenderLabel(
         ? selectAgentSenderAssociation(state, owner, identity, dispatchId)
         : undefined
       const legacyTab =
-        owner && orcaSessionId && !address.startsWith('dispatch:') && !hasAgentSenderPublication(state, owner)
+        owner &&
+        orcaSessionId &&
+        !address.startsWith('dispatch:') &&
+        !hasAgentSenderPublication(state, owner)
           ? findAgentMessageSenderChatTab(state, orcaSessionId, owner)
           : undefined
       const next = {
@@ -147,7 +148,7 @@ export function useAgentMessageSenderLabel(
       }
       return previous
     }
-  }, [address, orcaSessionId, terminalHandle, chatWorktreeId, targetKind, environmentId, dispatchId])
+  }, [address, orcaSessionId, terminalHandle, chatWorktreeId, stableTarget, dispatchId])
   const { host, tab, sessionId } = useLeasedSenderSelector(NO_ROWS, select)
   const conversationName = useStructuredConversationName(host, sessionId)
   return agentMessageSenderLabel({
