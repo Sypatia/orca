@@ -266,11 +266,11 @@ export function movedAgentSenderChannels(
   state: AppState,
   channels: Iterable<string>
 ): string[] {
-  let indexes: [SenderIndex, SenderIndex] | undefined
+  let pair: [SenderIndex, SenderIndex] | undefined
   const moved: string[] = []
   for (const channel of channels) {
     if (channel.startsWith(SENDER_CHANNEL)) {
-      const [before, after] = (indexes ??= [senderIndex(previous), senderIndex(state)])
+      const [before, after] = (pair ??= [senderIndex(previous), senderIndex(state)])
       const [host, identity]: [string, string] = JSON.parse(channel.slice(SENDER_CHANNEL.length))
       if (!sameLocation(lookup(before, host, identity), lookup(after, host, identity))) {
         moved.push(channel)
