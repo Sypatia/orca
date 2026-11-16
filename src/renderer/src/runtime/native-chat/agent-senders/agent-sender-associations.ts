@@ -30,6 +30,8 @@ type HostPart = {
 type SenderIndex = {
   parts: ReadonlyMap<string, HostPart>
   results: Map<string, Located | undefined>
+  /** Whether another host claims a pane, by pane and claiming host. */
+  rivals: Map<string, boolean>
 }
 type LocatedRows = {
   aliases: Aliases
@@ -44,8 +46,10 @@ const locatedRows = new WeakMap<AgentSenderPublication, LocatedRows>()
 const hostParts = new WeakMap<object, { aliases: Aliases; host: string; part: HostPart }>()
 const indexes = new WeakMap<object, { aliases: Aliases; index: SenderIndex }>()
 let joins = 0
-/** Rows joined to panes: each publication's once per alias change, each host's once per update. */
-export const agentSenderIndexWorkForTest = () => joins
+let claims = 0
+/** Rows joined to panes (each publication's once per alias change, each host's once per update),
+ *  and identity claims resolved. */
+export const agentSenderIndexWorkForTest = () => ({ joins, claims })
 
 function senderAliases(state: AppState): Aliases {
   const inputs = [
@@ -170,13 +174,14 @@ function senderIndex(state: AppState): SenderIndex {
   const parts = new Map(
     Object.entries(source).map(([host, scopes]) => [host, hostPart(host, scopes, aliases)])
   )
-  const index: SenderIndex = { parts, results: new Map() }
+  const index: SenderIndex = { parts, results: new Map(), rivals: new Map() }
   indexes.set(source, { aliases, index })
   return index
 }
 
 /** A host's claim for an identity: its own rows, then every row a peer runs for its principals. */
 function claim(index: SenderIndex, host: string, identity: string): Located | undefined {
+  claims++
   const part = index.parts.get(host)
   let value = part?.identities.get(identity)
   for (const principal of part?.principals ?? []) {
@@ -187,26 +192,29 @@ function claim(index: SenderIndex, host: string, identity: string): Located | un
   return value
 }
 
-/** Two hosts claiming one pane of this window make every claim on it ambiguous. */
+/** Two hosts claiming one pane of this window make every claim on it ambiguous. A host's own
+ *  claims on a pane all name that host, so only other hosts' candidates can rival it. */
 function contested(index: SenderIndex, location: LocatedAgentSender): boolean {
   const pane = key(location.worktreeId, location.paneKey)
-  const rival = (host: string, identity: string) => {
-    const other = claim(index, host, identity)
-    return Boolean(other && other.host !== location.host)
+  const id = key(pane, location.host)
+  const known = index.rivals.get(id)
+  if (known !== undefined) {
+    return known
   }
-  for (const [host, part] of index.parts) {
-    if (part.panes.get(pane)?.some((identity) => rival(host, identity))) {
-      return true
-    }
-    for (const [principal, identity] of part.attachedPanes.get(pane) ?? []) {
-      for (const [home, homePart] of index.parts) {
-        if (homePart.principals.has(principal) && rival(home, identity)) {
-          return true
-        }
-      }
-    }
-  }
-  return false
+  const rival = [...index.parts].some(
+    ([host, part]) =>
+      host !== location.host &&
+      (part.panes.get(pane)?.some((identity) => claim(index, host, identity)) ||
+        part.attachedPanes
+          .get(pane)
+          ?.some(([principal, identity]) =>
+            [...index.parts].some(
+              ([home, homePart]) => homePart.principals.has(principal) && claim(index, home, identity)
+            )
+          ))
+  )
+  index.rivals.set(id, rival)
+  return rival
 }
 
 function lookup(index: SenderIndex, host: string, identity: string): Located | undefined {

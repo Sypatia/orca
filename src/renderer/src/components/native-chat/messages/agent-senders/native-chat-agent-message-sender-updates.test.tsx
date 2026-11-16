@@ -84,14 +84,14 @@ it('a remote scope update rejoins only its peer and notifies only the senders it
     mount(`session_b_${i}`, { kind: 'environment', environmentId: 'b' })
   }
   const before = new Map(renders)
-  const work = agentSenderIndexWorkForTest()
+  const { joins } = agentSenderIndexWorkForTest()
   notified.length = 0
 
   // The sender of peer b's fifth scope closes its chat.
   act(() => publishScope('runtime:b', 'workspace_b_5', []))
 
   // Peer b's 209 remaining rows; none of the local publication's 9,261.
-  expect(agentSenderIndexWorkForTest() - work).toBe(209)
+  expect(agentSenderIndexWorkForTest().joins - joins).toBe(209)
   // Its label and link, and no other card.
   expect(notified).toEqual([
     'sender\0["runtime:b","orca_session_id:session_b_5"]',
@@ -99,4 +99,34 @@ it('a remote scope update rejoins only its peer and notifies only the senders it
   ])
   const rerendered = [...renders].filter(([id, count]) => count !== before.get(id))
   expect(rerendered).toEqual([['session_b_5', before.get('session_b_5')! + 1]])
+})
+
+it('checks a shared pane for rival hosts once per update, not once per identity on it', () => {
+  resetSenderStore()
+  // Follow-up Dispatches of one worker all name its pane.
+  useAppStore.getState().setAgentSenderPublication(
+    'local',
+    publication(
+      Array.from({ length: 9261 }, (_, i) => ({
+        identity: `dispatch:worker_${i}`,
+        paneKey: `tab-0:${LEAF}`,
+        worktreeId: 'workspace',
+        dispatchActor: true as const
+      }))
+    )
+  )
+  publishScope('runtime:b', 'workspace_b', [chat('session_b_0', 'workspace_b')])
+  for (let i = 0; i < 100; i++) {
+    const sender: AgentMessageSender = {
+      name: null,
+      party: { address: `dispatch:worker_${i}`, terminalHandle: null, orcaSessionId: null }
+    }
+    renderHook(() => useAgentMessageSenderOpens(sender, 'workspace', { kind: 'local' }))
+  }
+  const { claims } = agentSenderIndexWorkForTest()
+
+  act(() => publishScope('runtime:b', 'workspace_b', [chat('session_b_1', 'workspace_b')]))
+
+  // One claim per subscribed sender compared; the pane's other 9,260 claims never rescanned.
+  expect(agentSenderIndexWorkForTest().claims - claims).toBe(100)
 })
