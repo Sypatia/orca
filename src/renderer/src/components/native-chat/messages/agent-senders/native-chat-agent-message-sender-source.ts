@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useSyncExternalStore } from 'react'
 import { useAppStateView } from '@/store/retained-views/app-state-view'
+import { readingAgentSenders } from '@/runtime/native-chat/agent-senders/agent-sender-associations'
 import type { AppState } from '@/store/types'
 import { agentRowDisplayDotState } from '@/lib/agent-status/presentation/agent-row-dot-state'
 import { resolveRowProgramStatus } from '@/lib/program-status/agent-row-presentation'
@@ -90,7 +91,8 @@ export function useAgentMessageSenderSource(
   return useLeasedSenderSelector(leaseLocate, selected)
 }
 
-/** Location changes and the addressed row are both part of the selected value. */
+/** The addressed rows, the sender answers resolution read, and locations moved by tabs or owners
+ *  are what the selected value depends on: a card is notified only when one of them changes. */
 export function useLeasedSenderSelector<T>(
   locate: LocateSender | readonly LocateSender[],
   select: (state: AppState) => T
@@ -104,33 +106,32 @@ export function useLeasedSenderSelector<T>(
       const refresh = () => {
         const state = store.getState()
         const locators = typeof locate === 'function' ? [locate] : locate
-        const keys = new Set(
-          locators.flatMap((locator) => {
+        const [{ rows, next }, senders] = readingAgentSenders(() => ({
+          rows: locators.flatMap((locator) => {
             const location = locator(state)
-            return location ? [location.paneKey] : []
-          })
-        )
-        for (const [key, stop] of stops) {
-          if (!keys.has(key)) {
+            return location ? [`row\0${location.paneKey}`] : []
+          }),
+          next: select(state)
+        }))
+        const channels = new Set(['sender-locations', ...rows, ...senders])
+        for (const [channel, stop] of stops) {
+          if (!channels.has(channel)) {
             stop()
-            stops.delete(key)
+            stops.delete(channel)
           }
         }
-        for (const key of keys) {
-          if (!stops.has(key)) {
-            stops.set(key, projection.subscribe(`row\0${key}`, refresh))
+        for (const channel of channels) {
+          if (!stops.has(channel)) {
+            stops.set(channel, projection.subscribe(channel, refresh))
           }
         }
-        const next = select(state)
         if (next !== value) {
           value = next
           notify()
         }
       }
       refresh()
-      const stopLocations = projection.subscribe('sender-locations', refresh)
       return () => {
-        stopLocations()
         for (const stop of stops.values()) {
           stop()
         }
