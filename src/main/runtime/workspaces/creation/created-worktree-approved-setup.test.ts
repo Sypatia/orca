@@ -71,4 +71,16 @@ describe('runApprovedCreatedWorktreeSetup', () => {
     expect(runner.createSetupRunnerScript).not.toHaveBeenCalled()
     expect(provisionManagedWorktreeTerminals).not.toHaveBeenCalled()
   })
+
+  it('fails the call when the approved commands could not start', async () => {
+    provisionManagedWorktreeTerminals.mockResolvedValue({ setupSpawned: false, failed: true })
+
+    await expect(
+      runApprovedCreatedWorktreeSetup(
+        runtimeFor(),
+        'id:wt',
+        hashOrcaHookTrustContent(BRANCH_TRUST_CONTENT)
+      )
+    ).rejects.toThrow('Could not start')
+  })
 })
