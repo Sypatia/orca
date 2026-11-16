@@ -2,7 +2,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
-import { agentSenderIndexWorkForTest } from '@/runtime/native-chat/agent-senders/agent-sender-associations'
+import { agentSenderIndexWorkForTest } from '@/runtime/native-chat/agent-senders/agent-sender-index'
 import { agentSenderPublicationPatch } from '@/runtime/native-chat/agent-senders/agent-sender-publication-patch'
 import type { AgentSenderPublication } from '../../../../../../shared/orchestration/mailbox/agent-sender-associations'
 import type { AgentMessageSender } from '../../../../../../shared/agent-session/agent-session-message-source'
@@ -31,7 +31,11 @@ const publication = (associations: AgentSenderPublication['associations']) => ({
   attachments: [],
   revision: { epoch: 'scale', revision: ++revision }
 })
-function publishScope(host: string, scope: string, associations: AgentSenderPublication['associations']) {
+function publishScope(
+  host: string,
+  scope: string,
+  associations: AgentSenderPublication['associations']
+) {
   useAppStore.setState((state) =>
     agentSenderPublicationPatch(state, host, scope, publication(associations))
   )
@@ -46,11 +50,16 @@ it('a remote scope update rejoins only its peer and notifies only the senders it
       { peerFingerprint: 'peer-b', homePeerFingerprint: 'home' }
     ]
   })
-  for (const [peer, scopes] of [['a', 120], ['b', 210]] as const) {
+  for (const [peer, scopes] of [
+    ['a', 120],
+    ['b', 210]
+  ] as const) {
     publishScope(`runtime:${peer}`, '*', [])
     for (let i = 0; i < scopes; i++) {
       const id = `session_${peer}_${i}`
-      publishScope(`runtime:${peer}`, `workspace_${peer}_${i}`, [chat(id, `workspace_${peer}_${i}`)])
+      publishScope(`runtime:${peer}`, `workspace_${peer}_${i}`, [
+        chat(id, `workspace_${peer}_${i}`)
+      ])
     }
   }
   const projection = useAppStore.getState().agentStatusByPaneKey.projection

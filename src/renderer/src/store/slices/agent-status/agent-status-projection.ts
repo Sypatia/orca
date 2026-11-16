@@ -3,7 +3,7 @@ import type { AppState } from '../../types'
 import {
   movedAgentSenderChannels,
   samePublishingHosts
-} from '@/runtime/native-chat/agent-senders/agent-sender-associations'
+} from '@/runtime/native-chat/agent-senders/agent-sender-index'
 import type { AgentStatusEntry } from '../../../../../shared/agent-status/contracts/agent-status-types'
 import {
   readTerminalLeafAgentTypes,

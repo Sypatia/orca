@@ -6,13 +6,15 @@ import type {
   AgentSenderAssociation,
   AgentSenderPublication
 } from '../../../../../shared/orchestration/mailbox/agent-sender-associations'
+import type { ExecutionHostId } from '../../../../../shared/execution-host'
 import type { AgentMessageSender } from '../../../../../shared/agent-session/agent-session-message-source'
 import {
   structuredAgentSessionPaneKey,
   structuredAgentSessionTabId
 } from '../../../../../shared/agent-session/view/structured-agent-session-projection'
 import { parseOrcaSessionAddress } from '../../../../../shared/agent-session/identity/orca-session-address'
-import { resolveAgentMessageSender, type LocatedAgentSender } from './agent-sender-associations'
+import { resolveAgentMessageSender } from './agent-sender-associations'
+import type { LocatedAgentSender } from './agent-sender-index'
 import { agentSenderAliasParts, assembleAgentSenderAliases } from './agent-sender-alias-projection'
 import { agentSenderPublicationPatch } from './agent-sender-publication-patch'
 
@@ -51,7 +53,13 @@ function rebuiltIndex(state: AppState): Map<string, LocatedAgentSender | null> {
       return null
     }
     const paneKey = actual ?? row.paneKey
-    return { ...row, host, paneKey, hostPaneKey: row.paneKey, tab: chatTabs.get(key(host, paneKey)) }
+    return {
+      ...row,
+      host,
+      paneKey,
+      hostPaneKey: row.paneKey,
+      tab: chatTabs.get(key(host, paneKey))
+    }
   }
   const publications = Object.entries(state.agentSenderPublicationsByHost)
   const attachments = new Map<string, Map<string, LocatedAgentSender | null>>()
@@ -107,14 +115,16 @@ function rebuiltIndex(state: AppState): Map<string, LocatedAgentSender | null> {
   return index
 }
 
-const HOSTS = ['local', 'runtime:a', 'runtime:b']
-const FINGERPRINT: Record<string, string> = { local: 'fp-l', 'runtime:a': 'fp-a', 'runtime:b': 'fp-b' }
+const HOSTS: ExecutionHostId[] = ['local', 'runtime:a', 'runtime:b']
+const FINGERPRINT: Record<string, string> = {
+  local: 'fp-l',
+  'runtime:a': 'fp-a',
+  'runtime:b': 'fp-b'
+}
 const WORKTREES = ['w0', 'w1', 'w2']
 const SESSIONS = ['session_0', 'session_1']
 const IDENTITIES = [
-  'term_0',
-  'term_1',
-  'term_2',
+  ...Array.from({ length: 12 }, (_, i) => `term_${i}`),
   'dispatch:d0',
   'dispatch:d1',
   ...SESSIONS.map((s) => `orca_session_id:${s}`)
@@ -139,10 +149,12 @@ it('resolves every sender as the whole-window rebuild does across random scope u
   }
   const pick = <T>(values: readonly T[]) => values[random(values.length)]
   // Few panes and worktrees so hosts collide, rows disagree and scopes override the baseline.
-  const pane = () =>
-    random(4) === 0
-      ? structuredAgentSessionPaneKey(structuredAgentSessionTabId(pick(SESSIONS)), pick(SESSIONS))
+  const pane = () => {
+    const session = pick(SESSIONS)
+    return random(3) === 0
+      ? structuredAgentSessionPaneKey(structuredAgentSessionTabId(session), session)
       : `tab-${random(3)}:leaf`
+  }
   const row = (worktreeId: string): AgentSenderAssociation => ({
     identity: pick(IDENTITIES),
     paneKey: pane(),
@@ -158,18 +170,20 @@ it('resolves every sender as the whole-window rebuild does across random scope u
   for (let step = 0; step < 600; step++) {
     const host = pick(HOSTS)
     const scope = random(3) === 0 ? '*' : pick(WORKTREES)
-    const rows = (n: number) => Array.from({ length: random(n) }, () => row(scope === '*' ? pick(WORKTREES) : scope))
-    const homes = HOSTS.filter((other) => other !== host && random(2) === 0)
+    const rows = (n: number) =>
+      Array.from({ length: random(n) }, () => row(scope === '*' ? pick(WORKTREES) : scope))
+    const peers = HOSTS.filter((other) => other !== host && random(2) === 0)
     const publication: AgentSenderPublication = {
-      associations: rows(5),
+      associations: rows(4),
       ...(random(4) !== 0 ? { peerFingerprint: FINGERPRINT[host] } : {}),
-      principals: homes.map((home) => ({
-        peerFingerprint: FINGERPRINT[pick(HOSTS)],
-        homePeerFingerprint: FINGERPRINT[home]
+      // How each execution peer names this host, and the rows this host runs for other homes.
+      principals: peers.map((peer) => ({
+        peerFingerprint: FINGERPRINT[peer],
+        homePeerFingerprint: `home-${host}`
       })),
       attachments: rows(3).map((attached) => ({
         ...attached,
-        homePeerFingerprint: FINGERPRINT[pick(HOSTS)]
+        homePeerFingerprint: `home-${pick(HOSTS)}`
       })),
       revision: { epoch: 'e', revision: ++revision }
     }
@@ -220,11 +234,13 @@ it('resolves every sender as the whole-window rebuild does across random scope u
                         ? 'terminal'
                         : 'other'
                   }
-          kinds.add(location?.tab ? 'chat' : expected.kind)
+          kinds.add(
+            location?.tab ? 'chat' : location && location.host !== host ? 'attached' : expected.kind
+          )
           expect(resolveAgentMessageSender(read, host, senderFor(identity))).toEqual(expected)
         }
       }
     }
   }
-  expect([...kinds].sort()).toEqual(['ambiguous', 'chat', 'gone', 'legacy', 'located'])
+  expect([...kinds].sort()).toEqual(['ambiguous', 'attached', 'chat', 'gone', 'legacy', 'located'])
 })
