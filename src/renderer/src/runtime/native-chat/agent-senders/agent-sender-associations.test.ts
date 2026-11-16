@@ -144,8 +144,8 @@ function senderFor(identity: string): AgentMessageSender {
 it('resolves every sender as the whole-window rebuild does across random scope updates', () => {
   let seed = 7
   const random = (n: number) => {
-    seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648
-    return seed % n
+    seed = (Math.imul(seed, 1_103_515_245) + 12_345) >>> 0
+    return (seed >>> 16) % n
   }
   const pick = <T>(values: readonly T[]) => values[random(values.length)]
   // Few panes and worktrees so hosts collide, rows disagree and scopes override the baseline.
