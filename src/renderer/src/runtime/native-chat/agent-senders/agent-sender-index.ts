@@ -141,7 +141,7 @@ function hostPart(
     for (const row of rows.associations) {
       if (kept(row)) {
         joins++
-        part.identities.set(row.identity, merge(part.identities.get(row.identity), row)
+        part.identities.set(row.identity, merge(part.identities.get(row.identity), row))
         onPane(part.panes, row, row.identity)
       }
     }
@@ -150,7 +150,7 @@ function hostPart(
         joins++
         const bucket = part.attachments.get(principal) ?? new Map<string, Located>()
         part.attachments.set(principal, bucket)
-        bucket.set(row.identity, merge(bucket.get(row.identity), row)
+        bucket.set(row.identity, merge(bucket.get(row.identity), row))
         onPane(part.attachedPanes, row, [principal, row.identity])
       }
     }
