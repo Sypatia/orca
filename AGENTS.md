@@ -1,3 +1,9 @@
+## Sypatia Fork Owner Policy
+
+- Run CI locally before pushing any Sypatia-owned branch; use [docs/local-ci.md](docs/local-ci.md).
+- GitHub Actions remain paused for CI. Preserve the inherited workflow files and release-workflow calls to CI helpers; do not enable, dispatch or reactivate Actions.
+- This policy does not authorize merging, release creation or deployment.
+
 # Useful Commands
 
 - **Typecheck**: `pnpm tc` (or `tc:node` / `tc:cli` / `tc:web`)
