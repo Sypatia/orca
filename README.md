@@ -304,7 +304,7 @@ Pair with your desktop app to monitor and steer your agents from your phone.
 
 ## Developing
 
-Want to contribute or run locally? See our [CONTRIBUTING.md](.github/CONTRIBUTING.md) guide.
+Want to contribute or run locally? See our [CONTRIBUTING.md](.github/CONTRIBUTING.md) guide. Sypatia-owned branches follow the [local CI policy](docs/local-ci.md).
 
 <a href="https://github.com/stablyai/orca/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=stablyai/orca&max=500&columns=30" alt="Orca contributors" />
